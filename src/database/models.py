@@ -1,3 +1,4 @@
+from datetime import datetime
 """SQLAlchemy database models."""
 
 from sqlalchemy import Column, Integer, String, Float, Text, DateTime, Boolean, JSON, ForeignKey
@@ -15,7 +16,7 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     # Relationships
     sessions = relationship("Session", back_populates="user")
@@ -31,8 +32,8 @@ class Session(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     session_id = Column(String, unique=True, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), onupdate=datetime.utcnow)
 
     # Relationships
     user = relationship("User", back_populates="sessions")
@@ -49,7 +50,7 @@ class Conversation(Base):
     user_message = Column(Text)
     agent_response = Column(Text)
     tools_used = Column(JSON)  # List of tools used
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     # Relationships
     session = relationship("Session", back_populates="conversations")
@@ -67,8 +68,8 @@ class UserPreference(Base):
     price_range_min = Column(Float, nullable=True)
     price_range_max = Column(Float, nullable=True)
     preferences = Column(JSON)  # Additional preferences
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), onupdate=datetime.utcnow)
 
     # Relationships
     user = relationship("User", back_populates="preferences")
@@ -85,7 +86,7 @@ class CartItem(Base):
     product_name = Column(String)
     quantity = Column(Integer, default=1)
     price = Column(Float)
-    added_at = Column(DateTime(timezone=True), server_default=func.now())
+    added_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     # Relationships
     user = relationship("User", back_populates="cart_items")
@@ -110,7 +111,7 @@ class PriceHistory(Base):
     url = Column(Text)
     in_stock = Column(Boolean, default=True)
     availability = Column(Boolean, default=True)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    timestamp = Column(DateTime(timezone=True), default=datetime.utcnow, index=True)
     source = Column(String)  # Data source name
 
     # Product identifiers for deduplication

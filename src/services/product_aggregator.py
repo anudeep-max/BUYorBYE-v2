@@ -85,8 +85,8 @@ class ProductAggregator:
 
         # Per-source timeout: each retailer API call is capped individually so
         # a single slow source cannot stall the whole request.
-        _PER_SOURCE_TIMEOUT = 8.0   # seconds per source
-        _OVERALL_TIMEOUT    = 12.0  # hard ceiling for all sources combined
+        _PER_SOURCE_TIMEOUT = 15.0   # seconds per source
+        _OVERALL_TIMEOUT    = 20.0  # hard ceiling for all sources combined
 
         async def _fetch_with_timeout(source):
             try:

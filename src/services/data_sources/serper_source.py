@@ -33,11 +33,16 @@ class SerperDataSource(ProductDataSource):
             return []
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     self.base_url,
                     headers={"X-API-KEY": self.api_key, "Content-Type": "application/json"},
-                    json={"q": query, "num": num_results},
+                    json={
+                        "q": query,
+                        "num": num_results,
+                        "gl": "in",
+                        "hl": "en",
+                    },
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -50,7 +55,7 @@ class SerperDataSource(ProductDataSource):
                             "title": item.get("title", ""),
                             "description": item.get("description", ""),
                             "price": item.get("price", ""),
-                            "currency": item.get("currency", "USD"),
+                            "currency": "INR",
                             "imageUrl": item.get("imageUrl", ""),
                             "link": item.get("link", ""),
                             "rating": item.get("rating", 0),
@@ -75,7 +80,7 @@ class SerperDataSource(ProductDataSource):
             "name": product.get("title", ""),
             "description": product.get("description", ""),
             "price": price,
-            "currency": product.get("currency", "USD"),
+            "currency": product.get("currency", "INR"),
             "original_price": None,
             "shipping_cost": 0.0,  # Serper doesn't provide shipping
             "image_url": product.get("imageUrl", ""),
@@ -99,9 +104,30 @@ class SerperDataSource(ProductDataSource):
         }
 
     def _parse_price(self, price_str: str) -> float:
-        """Parse price string to float."""
+        """Parse price strings from Google Shopping/Serper."""
+
+        if price_str is None:
+            return 0.0
+
         try:
-            cleaned = str(price_str).replace("$", "").replace(",", "").strip()
-            return float(cleaned)
-        except (ValueError, AttributeError):
+            cleaned = str(price_str).strip()
+
+            # Remove common currency symbols/codes.
+            for symbol in ["₹", "$", "€", "£", "Rs.", "Rs", "INR", "USD"]:
+                cleaned = cleaned.replace(symbol, "")
+
+            # Remove commas and whitespace.
+            cleaned = cleaned.replace(",", "").strip()
+
+            # Keep only the numeric portion.
+            import re
+
+            match = re.search(r"\d+(?:\.\d+)?", cleaned)
+
+            if not match:
+                return 0.0
+
+            return float(match.group(0))
+
+        except (ValueError, TypeError, AttributeError):
             return 0.0

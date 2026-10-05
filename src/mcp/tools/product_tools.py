@@ -362,6 +362,34 @@ class ProductSearchTool(MCPTool):
                     max_str = f"${max_price:.2f}" if max_price else "inf"
                     logger.info(f"Extracted price range from query: ${min_price:.2f} - {max_str}")
 
+            # Remove budget language from the search query.
+            # Budget is passed separately as min_price/max_price.
+            search_query = query
+
+            if min_price is not None or max_price is not None:
+                price_patterns = [
+                    r"\b(?:under|below|less than)\s+₹?\s*[\d,]+(?:\.\d+)?(?:\s*(?:rupees?|rs\.?|inr))?\b",
+                    r"\b(?:over|above|more than)\s+₹?\s*[\d,]+(?:\.\d+)?(?:\s*(?:rupees?|rs\.?|inr))?\b",
+                    r"\bbetween\s+₹?\s*[\d,]+(?:\.\d+)?\s+(?:to|and)\s+₹?\s*[\d,]+(?:\.\d+)?(?:\s*(?:rupees?|rs\.?|inr))?\b",
+                    r"\b₹?\s*[\d,]+(?:\.\d+)?\s*[-–—]\s*₹?\s*[\d,]+(?:\.\d+)?(?:\s*(?:rupees?|rs\.?|inr))?\b",
+                ]
+
+                import re
+
+                for pattern in price_patterns:
+                    search_query = re.sub(
+                        pattern,
+                        "",
+                        search_query,
+                        flags=re.IGNORECASE,
+                    )
+
+                search_query = re.sub(r"\s+", " ", search_query).strip()
+
+                logger.info(
+                    f"Cleaned product search query: '{query}' -> '{search_query}'"
+                )
+
             # Use product aggregator to fetch from multiple sources
             from src.services.product_aggregator import product_aggregator
             from src.services.price_comparison import price_comparator
@@ -376,7 +404,7 @@ class ProductSearchTool(MCPTool):
                 else max_results * 2
             )
             products = await product_aggregator.search_products(
-                query=query,
+                query=search_query,
                 num_results=fetch_count,
                 min_price=min_price,
                 max_price=max_price,
@@ -497,13 +525,32 @@ class ProductSearchTool(MCPTool):
                 logger.info(f"Has coupon_info: {'coupon_info' in sample_product}")
                 logger.info(f"Has customer_value: {'customer_value' in sample_product}")
 
+            # Keep full enriched products internally, but return only
+            # compact top results to the LLM to avoid Groq token limits.
+            compact_products = []
+
+            for p in products[:5]:
+                compact_products.append({
+                    "name": p.get("name", ""),
+                    "price": p.get("price"),
+                    "currency": p.get("currency", "INR"),
+                    "retailer": p.get("retailer") or p.get("source") or "",
+                    "rating": p.get("rating"),
+                    "availability": p.get("availability", ""),
+                    "product_url": p.get("product_url") or p.get("url") or "",
+                    "image_url": p.get("image_url") or p.get("image") or p.get("thumbnail") or "",
+                    "shipping_cost": p.get("shipping_cost"),
+                    "original_price": p.get("original_price"),
+                    "deal_info": p.get("deal_info"),
+                })
+
             return {
                 "query": query,
                 "category": category,
                 "min_price": min_price,
                 "max_price": max_price,
                 "results_count": len(products),
-                "products": products,  # Return products with all fields intact
+                "products": compact_products,
                 "message": f"Found {len(products)} products with best deals",
                 "cached": False,
             }

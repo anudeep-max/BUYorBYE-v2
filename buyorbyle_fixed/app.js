@@ -77,54 +77,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Premium navigation panels. Chat stays in-place; Deals/Categories/Watchlist
-    // now open real interactive panels instead of acting like dead tabs.
+    // Header navigation is intentionally lightweight: the working shopping
+    // assistant remains the primary experience.
     document.querySelectorAll('.nav-link').forEach((button) => {
         button.addEventListener('click', () => {
-            const nav = button.dataset.nav;
             document.querySelectorAll('.nav-link').forEach((b) => b.classList.remove('active'));
             button.classList.add('active');
-            if (nav === 'chat') {
-                closeBuyorbyePanel();
-                chatInput?.focus();
-            } else {
-                openBuyorbyePanel(nav);
-            }
+            if (button.dataset.nav === 'chat') chatInput.focus();
+            else chatInput.focus();
         });
     });
 
-    // Product controls: real sorting + grid/list view.
+    // Premium product sort/view controls.
     document.querySelectorAll('.product-filter').forEach((button) => {
         button.addEventListener('click', () => {
-            const label = button.textContent.trim().toLowerCase();
-            const key = label.startsWith('price') ? 'price' : label.startsWith('rating') ? 'rating' : 'relevance';
-            window.__buyorbyleSortKey = key;
-            window.__buyorbyleSortDirection = (window.__buyorbyleSortDirection || {})[key] === 'asc' ? 'desc' : 'asc';
-            const direction = window.__buyorbyleSortDirection[key];
-
             document.querySelectorAll('.product-filter').forEach((b) => b.classList.remove('active'));
             button.classList.add('active');
-            button.querySelector('span')?.replaceChildren(
-                document.createTextNode(key === 'relevance' ? '↕' : direction === 'asc' ? '↑' : '↓')
-            );
-            button.setAttribute(
-                'aria-label',
-                `${key[0].toUpperCase() + key.slice(1)} sort: ${key === 'relevance' ? 'best match' : direction === 'asc' ? 'ascending' : 'descending'}`
-            );
-
-            if (typeof window.applyBuyorbyeProductControls === 'function') {
-                window.applyBuyorbyeProductControls();
-            }
-        });
-    });
-
-    document.querySelectorAll('.view-toggle').forEach((button, index) => {
-        button.addEventListener('click', () => {
-            document.querySelectorAll('.view-toggle').forEach((b) => b.classList.remove('active'));
-            button.classList.add('active');
-            const listView = index === 1;
-            productsList?.classList.toggle('list-view', listView);
-            productsList?.classList.toggle('grid-view', !listView);
         });
     });
 
@@ -1072,9 +1040,6 @@ function removeMessage(messageId) {
 }
 
 function displayProducts(products) {
-    // Keep the latest real product set available to navigation panels and controls.
-    window.__buyorbyleProducts = Array.isArray(products) ? products.slice() : [];
-    window.__buyorbyleAllProducts = window.__buyorbyleProducts.slice();
     if (!productsList) {
         console.error('[PROD] productsList element not found');
         return;
@@ -1111,46 +1076,9 @@ function displayProducts(products) {
             return;
         }
         
-        if (typeof window.applyBuyorbyeProductControls === 'function') {
-            window.applyBuyorbyeProductControls();
-        } else {
-            renderProducts(products);
-        }
+        renderProducts(products);
     }, 300);
 }
-
-window.__buyorbyleSortKey = 'relevance';
-window.__buyorbyleSortDirection = { price: 'asc', rating: 'desc', relevance: 'desc' };
-
-window.applyBuyorbyeProductControls = function() {
-    const all = Array.isArray(window.__buyorbyleAllProducts) ? window.__buyorbyleAllProducts.slice() : [];
-    if (!all.length) {
-        renderProducts([]);
-        return;
-    }
-
-    const key = window.__buyorbyleSortKey || 'relevance';
-    const direction = (window.__buyorbyleSortDirection || {})[key] || (key === 'price' ? 'asc' : 'desc');
-
-    const value = (p) => {
-        if (key === 'price') return Number(p?.price ?? Infinity);
-        if (key === 'rating') return Number(p?.rating ?? -Infinity);
-        const deal = p?.deal_info?.is_deal ? 1 : 0;
-        const rating = Number(p?.rating ?? 0);
-        const price = Number(p?.price ?? Infinity);
-        return (deal * 100) + (rating * 10) - Math.min(price / 10000, 10);
-    };
-
-    all.sort((a, b) => {
-        const av = value(a), bv = value(b);
-        if (key === 'relevance') return bv - av;
-        return direction === 'asc' ? av - bv : bv - av;
-    });
-
-    window.__buyorbyleProducts = all;
-    if (productCount) productCount.textContent = all.length;
-    renderProducts(all);
-};
 
 function showProductSkeletons(count) {
     if (!productsList) return;
@@ -1178,25 +1106,6 @@ function renderProducts(products) {
         
         const productImage = document.createElement('div');
         productImage.className = 'product-image';
-
-        // Premium wishlist control.
-        const favoriteButton = document.createElement('button');
-        favoriteButton.type = 'button';
-        favoriteButton.className = 'product-favorite';
-        favoriteButton.setAttribute('aria-label', 'Add to watchlist');
-        favoriteButton.innerHTML = '♡';
-        favoriteButton.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            favoriteButton.classList.toggle('is-favorite');
-            const active = favoriteButton.classList.contains('is-favorite');
-            favoriteButton.innerHTML = active ? '♥' : '♡';
-            favoriteButton.setAttribute('aria-label', active ? 'Remove from watchlist' : 'Add to watchlist');
-            if (typeof window.addToBuyorbyeWatchlist === 'function') {
-                window.addToBuyorbyeWatchlist(product);
-            }
-        });
-        productImage.appendChild(favoriteButton);
         
         const img = document.createElement('img');
         // Lazy loading for images
@@ -2224,235 +2133,3 @@ function initInteractiveEffects() {
 }
 
 // Connection check will be called after DOM loads
-
-
-/* =========================================================
-   BUYorBYE — Functional premium navigation
-   ========================================================= */
-(function initBuyorbyeNavigation() {
-    const STORAGE_KEY = 'buyorbyle_watchlist_v1';
-    const getWatchlist = () => {
-        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
-        catch { return []; }
-    };
-    const saveWatchlist = (items) => localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-
-    window.__buyorbyleWatchlist = getWatchlist();
-
-    window.addToBuyorbyeWatchlist = function(product) {
-        if (!product) return;
-        const list = getWatchlist();
-        const key = product.product_url || product.url || product.name;
-        const index = list.findIndex(p => (p.product_url || p.url || p.name) === key);
-        if (index >= 0) list.splice(index, 1);
-        else list.push(product);
-        saveWatchlist(list);
-        window.__buyorbyleWatchlist = list;
-        showBuyorbyeToast(index >= 0 ? 'Removed from Watchlist' : 'Added to Watchlist');
-    };
-
-    function showBuyorbyeToast(message) {
-        let toast = document.getElementById('buyorbyle-nav-toast');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'buyorbyle-nav-toast';
-            document.body.appendChild(toast);
-        }
-        toast.textContent = message;
-        toast.classList.add('show');
-        clearTimeout(window.__buyorbyleToastTimer);
-        window.__buyorbyleToastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
-    }
-
-    window.closeBuyorbyePanel = function() {
-        document.getElementById('buyorbyle-nav-overlay')?.remove();
-    };
-
-    window.openBuyorbyePanel = function(type) {
-        closeBuyorbyePanel();
-        const overlay = document.createElement('div');
-        overlay.id = 'buyorbyle-nav-overlay';
-        overlay.className = 'buyorbyle-nav-overlay';
-        overlay.innerHTML = `
-            <div class="buyorbyle-nav-panel" role="dialog" aria-modal="true">
-                <div class="buyorbyle-nav-panel-head">
-                    <div>
-                        <span class="buyorbyle-panel-kicker">BUYorBYE</span>
-                        <h2>${type === 'categories' ? 'Explore Categories' : type === 'watchlist' ? 'Your Watchlist' : 'Today’s Best Deals'}</h2>
-                    </div>
-                    <button class="buyorbyle-panel-close" aria-label="Close">×</button>
-                </div>
-                <div class="buyorbyle-panel-body" id="buyorbyle-panel-body"></div>
-            </div>`;
-        document.body.appendChild(overlay);
-
-        const body = overlay.querySelector('#buyorbyle-panel-body');
-        const close = () => closeBuyorbyePanel();
-        overlay.querySelector('.buyorbyle-panel-close').addEventListener('click', close);
-        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-        document.addEventListener('keydown', function esc(e) {
-            if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
-        });
-
-        if (type === 'categories') renderCategories(body);
-        else if (type === 'watchlist') renderWatchlist(body);
-        else renderDeals(body);
-    };
-
-    function runSearch(query) {
-        closeBuyorbyePanel();
-        const input = document.getElementById('chat-input');
-        const send = document.getElementById('send-button');
-        if (!input || !send) return;
-        input.value = query;
-        send.click();
-        document.querySelectorAll('.nav-link').forEach(b => b.classList.remove('active'));
-        document.querySelector('.nav-link[data-nav="chat"]')?.classList.add('active');
-    }
-
-    function renderCategories(body) {
-        const cats = [
-            ['👟', 'Fashion & Shoes', 'Best shoes, clothing and streetwear'],
-            ['💻', 'Laptops & Tech', 'Laptops, tablets and accessories'],
-            ['🎧', 'Audio', 'Earbuds, headphones and speakers'],
-            ['📱', 'Phones', 'Smartphones and mobile accessories'],
-            ['⌚', 'Wearables', 'Smartwatches and fitness bands'],
-            ['🎮', 'Gaming', 'Consoles, controllers and gaming gear'],
-            ['🏠', 'Home', 'Home, kitchen and everyday essentials'],
-            ['✨', 'Beauty', 'Skincare, haircare and personal care'],
-            ['🏃', 'Fitness', 'Running, gym and sports equipment'],
-            ['🎒', 'Travel', 'Bags, luggage and travel essentials']
-        ];
-        body.innerHTML = `<div class="buyorbyle-category-grid">${cats.map(([icon,name,desc]) => `
-            <button class="buyorbyle-category-card" data-query="Best ${name} products">
-                <span class="buyorbyle-category-icon">${icon}</span>
-                <span><strong>${name}</strong><small>${desc}</small></span>
-                <span class="buyorbyle-category-arrow">→</span>
-            </button>`).join('')}</div>`;
-        body.querySelectorAll('.buyorbyle-category-card').forEach(card => {
-            card.addEventListener('click', () => runSearch(card.dataset.query));
-        });
-    }
-
-    function renderWatchlist(body) {
-        const list = getWatchlist();
-        if (!list.length) {
-            body.innerHTML = `<div class="buyorbyle-empty-panel"><div>♡</div><h3>Your watchlist is empty</h3><p>Tap the heart on any product to save it here.</p></div>`;
-            return;
-        }
-        body.innerHTML = `<div class="buyorbyle-mini-grid">${list.map((p, i) => `
-            <div class="buyorbyle-mini-card">
-                <img src="${escapeHtml(p.image_url || p.image || p.thumbnail || 'https://via.placeholder.com/240x180?text=No+Image')}" alt="${escapeHtml(p.name || 'Product')}" onerror="this.src='https://via.placeholder.com/240x180?text=No+Image'">
-                <div class="buyorbyle-mini-info"><strong>${escapeHtml(p.name || 'Product')}</strong><b>${formatProductPrice(p.price, p.currency)}</b></div>
-                <button class="buyorbyle-mini-remove" data-index="${i}">Remove</button>
-            </div>`).join('')}</div>`;
-        body.querySelectorAll('.buyorbyle-mini-remove').forEach(btn => btn.addEventListener('click', () => {
-            const next = getWatchlist();
-            next.splice(Number(btn.dataset.index), 1);
-            saveWatchlist(next);
-            renderWatchlist(body);
-        }));
-    }
-
-    function renderDeals(body) {
-        const products = window.__buyorbyleProducts || [];
-        const deals = products.filter(p => p.deal_info?.is_deal || p.original_price);
-        if (!deals.length) {
-            body.innerHTML = `<div class="buyorbyle-empty-panel"><div>✦</div><h3>No deal results yet</h3><p>Search for a product and BUYorBYE will surface the best available offers here.</p><button class="buyorbyle-panel-action" data-search="best deals under ₹5000">Find deals</button></div>`;
-            body.querySelector('[data-search]')?.addEventListener('click', e => runSearch(e.currentTarget.dataset.search));
-            return;
-        }
-        body.innerHTML = `<div class="buyorbyle-deal-grid">${deals.map(p => `
-            <button class="buyorbyle-deal-item" data-url="${escapeHtml(p.product_url || p.url || '')}">
-                <img src="${escapeHtml(p.image_url || p.image || p.thumbnail || 'https://via.placeholder.com/220x160?text=No+Image')}" alt="">
-                <span><strong>${escapeHtml(p.name || 'Product')}</strong><b>${formatProductPrice(p.price, p.currency)}</b><small>${escapeHtml(p.retailer || 'Verified source')} · ${p.rating ? `★ ${p.rating}` : 'Price checked'}</small></span>
-            </button>`).join('')}</div>`;
-        body.querySelectorAll('.buyorbyle-deal-item').forEach(btn => btn.addEventListener('click', () => {
-            if (btn.dataset.url) window.open(btn.dataset.url, '_blank', 'noopener,noreferrer');
-        }));
-    }
-
-    function escapeHtml(value) {
-        return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-    }
-})();
-
-
-/* =========================================================
-   BUYorBYE — MOTION CONTROLLER
-   ========================================================= */
-(() => {
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduceMotion) return;
-
-    const applyCardMotion = (scope = document) => {
-        const cards = scope.querySelectorAll ? scope.querySelectorAll('.product-card') : [];
-        cards.forEach((card, index) => {
-            if (card.dataset.motionBound) return;
-            card.dataset.motionBound = '1';
-            card.style.animationDelay = `${Math.min(index * 70, 420)}ms`;
-            card.classList.add('motion-ready');
-        });
-    };
-
-    const chat = document.querySelector('#chat-messages');
-    if (chat) {
-        const observer = new MutationObserver(() => {
-            const messages = chat.querySelectorAll('.chat-message');
-            messages.forEach((message, index) => {
-                if (!message.dataset.motionBound) {
-                    message.dataset.motionBound = '1';
-                    message.style.animationDelay = `${Math.min(index * 35, 180)}ms`;
-                }
-            });
-        });
-        observer.observe(chat, { childList: true, subtree: true });
-    }
-
-    const productRoot = document.querySelector('#products-list') || document.querySelector('.products-list');
-    if (productRoot) {
-        applyCardMotion(productRoot);
-        const observer = new MutationObserver(() => requestAnimationFrame(() => applyCardMotion(productRoot)));
-        observer.observe(productRoot, { childList: true, subtree: true });
-    }
-
-    // Subtle cursor glow/parallax on desktop only.
-    let raf = 0;
-    window.addEventListener('pointermove', (event) => {
-        if (window.innerWidth < 900) return;
-        cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(() => {
-            const x = (event.clientX / window.innerWidth - .5) * 2;
-            const y = (event.clientY / window.innerHeight - .5) * 2;
-            document.documentElement.style.setProperty('--pointer-x', `${x.toFixed(3)}`);
-            document.documentElement.style.setProperty('--pointer-y', `${y.toFixed(3)}`);
-        });
-    }, { passive: true });
-
-    // Ripple on buttons, without changing existing click behavior.
-    document.addEventListener('click', (event) => {
-        const button = event.target.closest('button');
-        if (!button || button.disabled) return;
-        const rect = button.getBoundingClientRect();
-        const ripple = document.createElement('span');
-        ripple.className = 'motion-ripple';
-        const size = Math.max(rect.width, rect.height) * .45;
-        ripple.style.width = `${size}px`;
-        ripple.style.height = `${size}px`;
-        ripple.style.left = `${event.clientX - rect.left - size / 2}px`;
-        ripple.style.top = `${event.clientY - rect.top - size / 2}px`;
-        if (getComputedStyle(button).position === 'static') button.style.position = 'relative';
-        button.style.overflow = 'hidden';
-        button.appendChild(ripple);
-        setTimeout(() => ripple.remove(), 600);
-    }, { passive: true });
-
-    // Wishlist buttons get a satisfying pop after click.
-    document.addEventListener('click', (event) => {
-        const heart = event.target.closest('.wishlist-button, .wishlist-btn, [data-wishlist]');
-        if (!heart) return;
-        heart.classList.remove('wishlist-pop');
-        void heart.offsetWidth;
-        heart.classList.add('wishlist-pop');
-    }, { passive: true });
-})();
